@@ -1,0 +1,9 @@
+STORAGE: NONE
+RESTRICTION: || (== netcoreapp3.1) (== netstandard2.0) (== netstandard2.1)
+NUGET
+  remote: https://api.nuget.org/v3/index.json
+    FSharp.Control.AsyncSeq (2.0.24)
+      FSharp.Core (>= 4.3.2)
+    FSharp.Core (4.7.2)
+    NuGet.Versioning (5.6)
+    Octokit (0.48)
