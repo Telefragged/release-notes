@@ -116,7 +116,16 @@ Issues referenced since %s: %s"""
                 sinceText
                 issues
 
-        printfn "%s" body
+        let versionInfo = toVersion tagName
+
+        let newRelease =
+            NewRelease(tagName,
+                       Name = tagName,
+                       Body = body,
+                       Prerelease = versionInfo.IsPrerelease,
+                       Draft = false)
+
+        let! _ = client.Repository.Release.Create(owner, repository, newRelease) |> Async.AwaitTask
         return ()
     }
 
