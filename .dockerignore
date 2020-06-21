@@ -437,3 +437,4 @@ $RECYCLE.BIN/
 
 Dockerfile
 .dockerignore
+.git/
