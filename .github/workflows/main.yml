@@ -10,6 +10,6 @@ jobs:
     steps:
     - name: Release notes step
       id: release-notes
-      uses: telefragged/release-notes@0.0.5
+      uses: telefragged/release-notes@0.0.7
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
