@@ -1,0 +1,11 @@
+name: 'Release Notes'
+description: 'Automatically generates release notes based on issues closed'
+inputs:
+  repo-token:
+    description: "The GITHUB_SECRET token"
+    required: true
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.repo-token }}

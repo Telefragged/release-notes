@@ -438,3 +438,4 @@ $RECYCLE.BIN/
 Dockerfile
 .dockerignore
 .git/
+action.yaml
