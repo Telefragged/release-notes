@@ -154,9 +154,8 @@ let main argv =
         | _ -> failwithf "Failed to get repository name from %s" repository
 
     let token =
-        Environment.GetEnvironmentVariable("GITHUB_TOKEN")
-        |> Option.ofObj
-        |> Option.defaultWith (fun () -> failwith "A github token is required")
+        Array.tryHead argv
+        |> Option.defaultWith (fun () -> failwith "expected at least one argument")
 
     let client = GitHubClient(ProductHeaderValue("release-notes"), Credentials = Credentials(token))
     try
