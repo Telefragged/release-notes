@@ -6,7 +6,7 @@ on:
 jobs:
   release_notes_job:
     runs-on: ubuntu-latest
-    name: Creates release notes
+    name: Create release notes
     steps:
     - name: Release notes step
       id: release-notes
