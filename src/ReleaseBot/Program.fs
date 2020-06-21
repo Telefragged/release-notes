@@ -131,13 +131,27 @@ Issues referenced since %s: %s"""
 
 open System
 
+
+let environVarOrFail variableName =
+    Environment.GetEnvironmentVariable(variableName)
+    |> Option.ofObj
+    |> Option.defaultWith (fun () -> failwithf "Environment variable %s not found" variableName)
+
 [<EntryPoint>]
 let main argv =
+    let tagName =
+        let tagName = environVarOrFail "GITHUB_REF"
+        NuGetVersion.TryParseStrict (tagName.TrimStart('v'))
+        |> function
+            | (true, _) -> tagName
+            | (false, _) -> failwithf "Github ref %s is not a version, exiting" tagName
 
-    let (owner, repository, tagName) =
-        match List.ofArray argv with
-        | x::y::z::_ -> (x, y, z)
-        | _ -> failwithf "Expected at least 3 arguments but got %d" argv.Length
+    let (owner, repository) =
+        let repository = environVarOrFail "GITHUB_REPOSITORY"
+
+        match List.ofArray (repository.Split('/')) with
+        | owner::[repository] -> (owner, repository)
+        | _ -> failwithf "Failed to get repository name from %s" repository
 
     let token =
         Environment.GetEnvironmentVariable("GITHUB_TOKEN")
