@@ -141,10 +141,14 @@ let environVarOrFail variableName =
 let main argv =
     let tagName =
         let tagName = environVarOrFail "GITHUB_REF"
+        let tagName =
+            if tagName.StartsWith("refs/tags/")
+            then tagName.Substring(10)
+            else failwithf "Github ref %s is not a tag, exiting" tagName
         NuGetVersion.TryParseStrict (tagName.TrimStart('v'))
         |> function
             | (true, _) -> tagName
-            | (false, _) -> failwithf "Github ref %s is not a version, exiting" tagName
+            | (false, _) -> failwithf "Tag %s is not a version, exiting" tagName
 
     let (owner, repository) =
         let repository = environVarOrFail "GITHUB_REPOSITORY"
