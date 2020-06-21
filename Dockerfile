@@ -9,6 +9,5 @@ COPY . ./
 RUN dotnet publish -c Release -o publish
 
 FROM mcr.microsoft.com/dotnet/core/runtime:3.1-alpine
-WORKDIR /app
 COPY --from=builder /src/publish .
-ENTRYPOINT ["dotnet", "ReleaseBot.dll"]
+ENTRYPOINT ["dotnet", "/app/ReleaseBot.dll"]
