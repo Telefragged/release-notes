@@ -1,0 +1,15 @@
+name: Release notes
+
+on:
+  create
+
+jobs:
+  release_notes_job:
+    runs-on: ubuntu-latest
+    name: Creates release notes
+    steps:
+    - name: Release notes step
+      id: release-notes
+      uses: telefragged/release-notes@0.0.3
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
