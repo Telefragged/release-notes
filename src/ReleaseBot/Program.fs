@@ -176,10 +176,35 @@ let environVarOrFail variableName =
     |> Option.ofObj
     |> Option.defaultWith (fun () -> failwithf "Environment variable %s not found" variableName)
 
+open Argu
+
+[<RequireQualifiedAccess>]
+type Arguments =
+    | [<CustomAppSettings("COMMENT_MODE")>] Comment_Mode of CommentMode
+    | [<CustomAppSettings("TOKEN"); Mandatory; AltCommandLine("-t")>] Token of token:string
+    | [<CustomAppSettings("GITHUB_REF"); Mandatory>] Github_Ref of ref:string
+    | [<CustomAppSettings("GITHUB_REPOSITORY"); Mandatory>] Github_Repository of repository:string
+
+    interface IArgParserTemplate with
+        member s.Usage =
+            match s with
+            | Comment_Mode _ -> "Enable or disable comments for the referenced issues. Default off"
+            | Token _ -> "The Github API token"
+            | Github_Ref _ -> "The git ref or tag name"
+            | Github_Repository _ -> "The repository, in format '<owner>/<repository>'"
+
 [<EntryPoint>]
 let main argv =
+    let envReader = EnvironmentVariableConfigurationReader()
+
+    let errorHandler = ProcessExiter(colorizer = function ErrorCode.HelpText -> None | _ -> Some ConsoleColor.Red)
+
+    let parser = ArgumentParser.Create<Arguments>(programName = "release-notes", errorHandler=errorHandler)
+
+    let results = parser.Parse(argv, configurationReader=envReader)
+
     let tagName =
-        let tagName = environVarOrFail "GITHUB_REF"
+        let tagName = results.GetResult(Arguments.Github_Ref)
         let tagName =
             if tagName.StartsWith("refs/tags/")
             then tagName.Substring(10)
@@ -187,20 +212,20 @@ let main argv =
         NuGetVersion.TryParseStrict (tagName.TrimStart('v'))
         |> function
             | (true, _) -> tagName
-            | (false, _) -> exit 0// failwithf "Tag %s is not a version, exiting" tagName
+            | (false, _) ->
+                printf "Ref %s is not a version, exiting" tagName
+                exit 0
 
     let (owner, repository) =
-        let repository = environVarOrFail "GITHUB_REPOSITORY"
+        let repository = results.GetResult(Arguments.Github_Repository)
 
         match List.ofArray (repository.Split('/')) with
         | owner::[repository] -> (owner, repository)
         | _ -> failwithf "Failed to get repository name from %s" repository
 
-    let (token, commentMode) =
-        match List.ofArray argv with
-        | token:: CommentMode commentMode:: _ -> (token, commentMode)
-        | _::notCommentMode::_ -> failwithf "%s is not a valid comment mode" notCommentMode
-        | _ -> failwith "expected at least two arguments"
+    let token = results.GetResult(Arguments.Token)
+
+    let commentMode = results.TryGetResult(Arguments.Comment_Mode) |> Option.defaultValue CommentMode.Off
 
     let client = GitHubClient(ProductHeaderValue("release-notes"), Credentials = Credentials(token))
     try
