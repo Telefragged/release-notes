@@ -3,17 +3,18 @@ open FSharp.Control
 
 open NuGet.Versioning
 
-let toVersion (versionString : string) =
+let toVersion (versionString: string) =
     match NuGetVersion.TryParseStrict(versionString.Trim().TrimStart('v')) with
-        | (true, version) -> version
-        | (false, _) -> NuGetVersion(0, 0, 0)
+    | (true, version) -> version
+    | (false, _) -> NuGetVersion(0, 0, 0)
 
 type RepositoryTag with
-    member this.Version =
-        toVersion this.Name
+    member this.Version = toVersion this.Name
 
-let (|Insensitive|_|) (compare : string) (str : string)=
-    if str.ToUpperInvariant() = compare.ToUpperInvariant() then Some str else None
+let (|Insensitive|_|) (compare: string) (str: string) =
+    if str.ToUpperInvariant() = compare.ToUpperInvariant()
+    then Some str
+    else None
 
 [<RequireQualifiedAccess>]
 type CommentMode =
@@ -29,15 +30,13 @@ module CommentMode =
         | Insensitive "on" _ -> Some CommentMode.On
         | _ -> None
 
-let (|CommentMode|_|) str =
-    CommentMode.tryParse str
+let (|CommentMode|_|) str = CommentMode.tryParse str
 
-let getTagPair (client : GitHubClient)
-               (owner : string)
-               (name : string)
-               (tagName : string) =
+let getTagPair (client: GitHubClient) (owner: string) (name: string) (tagName: string) =
     async {
-        let! tags = client.Repository.GetAllTags(owner, name) |> Async.AwaitTask
+        let! tags =
+            client.Repository.GetAllTags(owner, name)
+            |> Async.AwaitTask
 
         let sortedTags =
             tags
@@ -45,6 +44,7 @@ let getTagPair (client : GitHubClient)
             |> List.ofSeq
 
         let version = NuGetVersion(tagName.TrimStart('v'))
+
         let firstTag =
             sortedTags
             |> List.tryFind (fun tag -> toVersion tag.Name = version)
@@ -52,21 +52,25 @@ let getTagPair (client : GitHubClient)
         let secondTag =
             sortedTags
             |> Seq.skipWhile (fun tag -> tag.Version > version)
-            |> Seq.tryFind (fun tag -> not <| tag.Version.IsPrerelease && tag.Version <> version)
+            |> Seq.tryFind (fun tag ->
+                not <| tag.Version.IsPrerelease
+                && tag.Version <> version)
 
         return (firstTag, secondTag)
     }
 
-let getCommits (client : GitHubClient)
-               (owner : string)
-               (name : string)
-               (firstTag : RepositoryTag option)
-               (secondTag : RepositoryTag option) =
+let getCommits (client: GitHubClient)
+               (owner: string)
+               (name: string)
+               (firstTag: RepositoryTag option)
+               (secondTag: RepositoryTag option)
+               =
     async {
         let! compareResult =
             match firstTag, secondTag with
             | Some current, Some previous ->
-                client.Repository.Commit.Compare(owner, name, previous.Commit.Sha, current.Commit.Sha) |> Async.AwaitTask
+                client.Repository.Commit.Compare(owner, name, previous.Commit.Sha, current.Commit.Sha)
+                |> Async.AwaitTask
             // | [current] ->
             //     client.Repository.Commit.
 
@@ -85,43 +89,51 @@ let parseCommits client owner repository firstTag secondTag =
         let! commits = getCommits client owner repository firstTag secondTag
 
         for commit in commits do
-            use lineReader = new System.IO.StringReader(commit.Commit.Message)
+            use lineReader =
+                new System.IO.StringReader(commit.Commit.Message)
+
             let mutable line = lineReader.ReadLine()
+
             while not <| isNull line do
                 for m in regex.Matches(line) do
                     match List.ofSeq m.Groups with
-                    | _::owner::repository::[issue] when owner.Success && repository.Success ->
+                    | _ :: owner :: repository :: [ issue ] when owner.Success && repository.Success ->
                         yield (owner.Value, repository.Value, int issue.Value)
-                    | _::_::_::[issue] ->
-                        yield (owner, repository, int issue.Value)
+                    | _ :: _ :: _ :: [ issue ] -> yield (owner, repository, int issue.Value)
                     | _ -> failwith "wtf"
+
                 line <- lineReader.ReadLine()
     }
 
-let getIssueLine (client : GitHubClient) owner repository issueNumber =
+let getIssueLine (client: GitHubClient) owner repository issueNumber =
     async {
-        let! issue = client.Issue.Get(owner, repository, issueNumber) |> Async.AwaitTask
+        let! issue =
+            client.Issue.Get(owner, repository, issueNumber)
+            |> Async.AwaitTask
 
         return sprintf "%s (%s/%s#%d)" issue.Title owner repository issueNumber
     }
 
-let createIssueComment (client : GitHubClient)
-                       (releaseName : string)
-                       (releaseUrl : string)
-                       (owner : string)
-                       (repository : string)
-                       (issueNumber : int) =
+let createIssueComment (client: GitHubClient)
+                       (releaseName: string)
+                       (releaseUrl: string)
+                       (owner: string)
+                       (repository: string)
+                       (issueNumber: int)
+                       =
     let body =
-        sprintf
-            "This issue has been referenced in release [%s](%s)" releaseName releaseUrl
+        sprintf "This issue has been referenced in release [%s](%s)" releaseName releaseUrl
 
-    client.Issue.Comment.Create(owner, repository, issueNumber, body) |> Async.AwaitTask |> Async.Ignore
+    client.Issue.Comment.Create(owner, repository, issueNumber, body)
+    |> Async.AwaitTask
+    |> Async.Ignore
 
-let setReleaseText (client : GitHubClient)
-                   (owner : string)
-                   (repository : string)
-                   (tagName : string)
-                   (commentMode : CommentMode) =
+let setReleaseText (client: GitHubClient)
+                   (owner: string)
+                   (repository: string)
+                   (tagName: string)
+                   (commentMode: CommentMode)
+                   =
     async {
         let! (firstTag, secondTag) = getTagPair client owner repository tagName
 
@@ -143,29 +155,26 @@ let setReleaseText (client : GitHubClient)
             | None -> "start"
 
         let body =
-            sprintf
-                """Release %s
+            sprintf """Release %s
 
-Issues referenced since %s: %s"""
-                tagName
-                sinceText
-                issueText
+Issues referenced since %s: %s""" tagName sinceText issueText
 
         let versionInfo = toVersion tagName
 
         let newRelease =
-            NewRelease(tagName,
-                       Name = tagName,
-                       Body = body,
-                       Prerelease = versionInfo.IsPrerelease,
-                       Draft = false)
+            NewRelease(tagName, Name = tagName, Body = body, Prerelease = versionInfo.IsPrerelease, Draft = false)
 
-        let! newRelease = client.Repository.Release.Create(owner, repository, newRelease) |> Async.AwaitTask
+        let! newRelease =
+            client.Repository.Release.Create(owner, repository, newRelease)
+            |> Async.AwaitTask
+
         match commentMode with
         | CommentMode.On ->
             do! issues
                 |> AsyncSeq.ofSeq
-                |> AsyncSeq.iterAsync (fun tp -> tp |||> createIssueComment client tagName newRelease.HtmlUrl)
+                |> AsyncSeq.iterAsync (fun tp ->
+                    tp
+                    |||> createIssueComment client tagName newRelease.HtmlUrl)
         | CommentMode.Off -> ()
     }
 
@@ -181,9 +190,9 @@ open Argu
 [<RequireQualifiedAccess>]
 type Arguments =
     | [<CustomAppSettings("COMMENT_MODE")>] Comment_Mode of CommentMode
-    | [<CustomAppSettings("TOKEN"); Mandatory; AltCommandLine("-t")>] Token of token:string
-    | [<CustomAppSettings("GITHUB_REF"); Mandatory>] Github_Ref of ref:string
-    | [<CustomAppSettings("GITHUB_REPOSITORY"); Mandatory>] Github_Repository of repository:string
+    | [<CustomAppSettings("TOKEN"); Mandatory; AltCommandLine("-t")>] Token of token: string
+    | [<CustomAppSettings("GITHUB_REF"); Mandatory>] Github_Ref of ref: string
+    | [<CustomAppSettings("GITHUB_REPOSITORY"); Mandatory>] Github_Repository of repository: string
 
     interface IArgParserTemplate with
         member s.Usage =
@@ -197,42 +206,52 @@ type Arguments =
 let main argv =
     let envReader = EnvironmentVariableConfigurationReader()
 
-    let errorHandler = ProcessExiter(colorizer = function ErrorCode.HelpText -> None | _ -> Some ConsoleColor.Red)
+    let errorHandler =
+        ProcessExiter
+            (colorizer = function
+            | ErrorCode.HelpText -> None
+            | _ -> Some ConsoleColor.Red)
 
-    let parser = ArgumentParser.Create<Arguments>(programName = "release-notes", errorHandler=errorHandler)
+    let parser =
+        ArgumentParser.Create<Arguments>(programName = "release-notes", errorHandler = errorHandler)
 
-    let results = parser.Parse(argv, configurationReader=envReader)
+    let results =
+        parser.Parse(argv, configurationReader = envReader)
 
     let tagName =
         let tagName = results.GetResult(Arguments.Github_Ref)
+
         let tagName =
-            if tagName.StartsWith("refs/tags/")
-            then tagName.Substring(10)
-            else tagName
-        NuGetVersion.TryParseStrict (tagName.TrimStart('v'))
+            if tagName.StartsWith("refs/tags/") then tagName.Substring(10) else tagName
+
+        NuGetVersion.TryParseStrict(tagName.TrimStart('v'))
         |> function
-            | (true, _) -> tagName
-            | (false, _) ->
-                printf "Ref %s is not a version, exiting" tagName
-                exit 0
+        | (true, _) -> tagName
+        | (false, _) ->
+            printf "Ref %s is not a version, exiting" tagName
+            exit 0
 
     let (owner, repository) =
-        let repository = results.GetResult(Arguments.Github_Repository)
+        let repository =
+            results.GetResult(Arguments.Github_Repository)
 
         match List.ofArray (repository.Split('/')) with
-        | owner::[repository] -> (owner, repository)
+        | owner :: [ repository ] -> (owner, repository)
         | _ -> failwithf "Failed to get repository name from %s" repository
 
     let token = results.GetResult(Arguments.Token)
 
-    let commentMode = results.TryGetResult(Arguments.Comment_Mode) |> Option.defaultValue CommentMode.Off
+    let commentMode =
+        results.TryGetResult(Arguments.Comment_Mode)
+        |> Option.defaultValue CommentMode.Off
 
-    let client = GitHubClient(ProductHeaderValue("release-notes"), Credentials = Credentials(token))
+    let client =
+        GitHubClient(ProductHeaderValue("release-notes"), Credentials = Credentials(token))
+
     try
         setReleaseText client owner repository tagName commentMode
         |> Async.RunSynchronously
-    with ex ->
-        printfn "%A" ex
+    with ex -> printfn "%A" ex
 
     let apiInfo = client.GetLastApiInfo()
     printfn "Remaining calls: %d, Refresh: %s" (apiInfo.RateLimit.Remaining) (apiInfo.RateLimit.Reset.ToString())
