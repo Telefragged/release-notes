@@ -3,6 +3,7 @@ name: .NET Core
 on:
   push:
     branches: [ master ]
+    tags:
   pull_request:
     branches: [ master ]
 
@@ -23,3 +24,15 @@ jobs:
       run: dotnet paket restore
     - name: Build
       run: dotnet build --configuration Release
+  release_notes_job:
+    runs-on: ubuntu-latest
+    name: Create release notes
+    needs: build
+    if: startsWith(github.event.push.ref, '/refs/tags/')
+    steps:
+    - name: Release notes step
+      id: release-notes
+      uses: telefragged/release-notes@0.0.8
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        update-issue: 'true'
