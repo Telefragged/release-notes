@@ -4,8 +4,12 @@ inputs:
   repo-token:
     description: "The GITHUB_SECRET token"
     required: true
+  update-issue:
+    description: 'If true will comment on referenced issues with a link to the release'
+    default: 'false'
 runs:
   using: 'docker'
   image: 'Dockerfile'
   args:
     - ${{ inputs.repo-token }}
+    - ${{ inputs.update-issue }}
