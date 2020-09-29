@@ -12,6 +12,26 @@ type RepositoryTag with
     member this.Version =
         toVersion this.Name
 
+let (|Insensitive|_|) (compare : string) (str : string)=
+    if str.ToUpperInvariant() = compare.ToUpperInvariant() then Some str else None
+
+[<RequireQualifiedAccess>]
+type CommentMode =
+    | Off
+    | On
+
+module CommentMode =
+    let tryParse str =
+        match str with
+        | Insensitive "false" _
+        | Insensitive "off" _ -> Some CommentMode.Off
+        | Insensitive "true" _
+        | Insensitive "on" _ -> Some CommentMode.On
+        | _ -> None
+
+let (|CommentMode|_|) str =
+    CommentMode.tryParse str
+
 let getTagPair (client : GitHubClient)
                (owner : string)
                (name : string)
@@ -85,10 +105,23 @@ let getIssueLine (client : GitHubClient) owner repository issueNumber =
         return sprintf "%s (%s/%s#%d)" issue.Title owner repository issueNumber
     }
 
+let createIssueComment (client : GitHubClient)
+                       (releaseName : string)
+                       (releaseUrl : string)
+                       (owner : string)
+                       (repository : string)
+                       (issueNumber : int) =
+    let body =
+        sprintf
+            "This issue has been referenced in release [%s](%s)" releaseName releaseUrl
+
+    client.Issue.Comment.Create(owner, repository, issueNumber, body) |> Async.AwaitTask |> Async.Ignore
+
 let setReleaseText (client : GitHubClient)
                    (owner : string)
                    (repository : string)
-                   (tagName : string) =
+                   (tagName : string)
+                   (commentMode : CommentMode) =
     async {
         let! (firstTag, secondTag) = getTagPair client owner repository tagName
 
@@ -96,8 +129,10 @@ let setReleaseText (client : GitHubClient)
             parseCommits client owner repository firstTag secondTag
             |> AsyncSeq.toListAsync
 
-        let! issues =
-            List.distinct issues
+        let issues = List.distinct issues
+
+        let! issueText =
+            issues
             |> AsyncSeq.ofSeq
             |> AsyncSeq.mapAsync (fun tp -> tp |||> (getIssueLine client))
             |> AsyncSeq.fold (fun state cur -> state + "\n- " + cur) System.String.Empty
@@ -114,7 +149,7 @@ let setReleaseText (client : GitHubClient)
 Issues referenced since %s: %s"""
                 tagName
                 sinceText
-                issues
+                issueText
 
         let versionInfo = toVersion tagName
 
@@ -125,12 +160,16 @@ Issues referenced since %s: %s"""
                        Prerelease = versionInfo.IsPrerelease,
                        Draft = false)
 
-        let! _ = client.Repository.Release.Create(owner, repository, newRelease) |> Async.AwaitTask
-        return ()
+        let! newRelease = client.Repository.Release.Create(owner, repository, newRelease) |> Async.AwaitTask
+        match commentMode with
+        | CommentMode.On ->
+            do! issues
+                |> AsyncSeq.ofSeq
+                |> AsyncSeq.iterAsync (fun tp -> tp |||> createIssueComment client tagName newRelease.HtmlUrl)
+        | CommentMode.Off -> ()
     }
 
 open System
-
 
 let environVarOrFail variableName =
     Environment.GetEnvironmentVariable(variableName)
@@ -157,13 +196,15 @@ let main argv =
         | owner::[repository] -> (owner, repository)
         | _ -> failwithf "Failed to get repository name from %s" repository
 
-    let token =
-        Array.tryHead argv
-        |> Option.defaultWith (fun () -> failwith "expected at least one argument")
+    let (token, commentMode) =
+        match List.ofArray argv with
+        | token:: CommentMode commentMode:: _ -> (token, commentMode)
+        | _::notCommentMode::_ -> failwithf "%s is not a valid comment mode" notCommentMode
+        | _ -> failwith "expected at least two arguments"
 
     let client = GitHubClient(ProductHeaderValue("release-notes"), Credentials = Credentials(token))
     try
-        setReleaseText client owner repository tagName
+        setReleaseText client owner repository tagName commentMode
         |> Async.RunSynchronously
     with ex ->
         printfn "%A" ex
