@@ -6,10 +6,10 @@ inputs:
     required: true
   update-issue:
     description: 'If true will comment on referenced issues with a link to the release'
-    default: 'false'
+    default: 'off'
 runs:
   using: 'docker'
   image: 'Dockerfile'
-  args:
-    - ${{ inputs.repo-token }}
-    - ${{ inputs.update-issue }}
+  env:
+    TOKEN: ${{ inputs.repo-token }}
+    UPDATE_ISSUE: ${{ inputs.update-issue }}
