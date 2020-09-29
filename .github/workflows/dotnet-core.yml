@@ -59,7 +59,7 @@ jobs:
     steps:
     - name: Release notes step
       id: release-notes
-      uses: telefragged/release-notes@0.1.0
+      uses: telefragged/release-notes@0.1.2
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
-        update-issue: 'on'
+        comment-issue: 'on'
