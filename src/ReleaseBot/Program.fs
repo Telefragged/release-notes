@@ -107,11 +107,15 @@ let parseCommits client owner repository firstTag secondTag =
 
 let getIssueLine (client: GitHubClient) owner repository issueNumber =
     async {
-        let! issue =
-            client.Issue.Get(owner, repository, issueNumber)
-            |> Async.AwaitTask
+        try
+            let! issue =
+                client.Issue.Get(owner, repository, issueNumber)
+                |> Async.AwaitTask
 
-        return sprintf "%s (%s/%s#%d)" issue.Title owner repository issueNumber
+            return sprintf "%s (%s/%s#%d)" issue.Title owner repository issueNumber |> Some
+        with ex ->
+            printfn "Warning: Exception caught when getting issue %s/%s#%d\n%A" owner repository issueNumber ex
+            return None
     }
 
 let createIssueComment (client: GitHubClient)
@@ -146,7 +150,7 @@ let setReleaseText (client: GitHubClient)
         let! issueText =
             issues
             |> AsyncSeq.ofSeq
-            |> AsyncSeq.mapAsync (fun tp -> tp |||> (getIssueLine client))
+            |> AsyncSeq.chooseAsync (fun tp -> tp |||> (getIssueLine client))
             |> AsyncSeq.fold (fun state cur -> state + "\n- " + cur) System.String.Empty
 
         let sinceText =
@@ -174,7 +178,9 @@ Issues referenced since %s: %s""" tagName sinceText issueText
                 |> AsyncSeq.ofSeq
                 |> AsyncSeq.iterAsync (fun tp ->
                     tp
-                    |||> createIssueComment client tagName newRelease.HtmlUrl)
+                    |||> createIssueComment client tagName newRelease.HtmlUrl
+                    |> Async.Catch
+                    |> Async.Ignore)
         | CommentMode.Off -> ()
     }
 
